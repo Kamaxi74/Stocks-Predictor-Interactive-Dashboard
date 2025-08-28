@@ -1,0 +1,10 @@
+streamlit
+pyngrok
+keras
+tensorflow-cpu
+datetime
+joblib
+numpy
+pandas
+scikit-learn
+plotly
