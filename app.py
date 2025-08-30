@@ -56,15 +56,11 @@ st.title("📊 Stock Price Prediction Dashboard")
 st.markdown("Select a stock, date, and prediction horizon. The app will forecast the closing price for the next few days.")
 
 # Sidebar inputs
-stock_choice = st.sidebar.selectbox("📈 Select Stock", ["TSLA", "GOOGL"])
+stock_choice = st.sidebar.selectbox("📈 Select Stock", ["TESLA", "GOOGLE"])
 data = resources[stock_choice]["data"]
 
 # Only allow dates with at least 60 prior days
 valid_dates = data.index[60:]  # skip first 60 days
-
-# Generate list of weekend dates between min and max date
-all_dates = pd.date_range(start=valid_dates[0], end=valid_dates[-1], freq='D')
-weekends = all_dates[all_dates.weekday >= 5]  # Saturday (5) and Sunday (6)
 
 # Calendar-style date picker with weekend disabled
 selected_date = st.sidebar.date_input(
@@ -73,14 +69,18 @@ selected_date = st.sidebar.date_input(
     min_value=valid_dates[0],     # earliest selectable date
     max_value=valid_dates[-1],    # latest selectable date
 )
-
-# Ensure the selected date is a valid trading day (exclude weekends)
-if selected_date.weekday() == 5:  # Saturday
-    selected_date = selected_date - timedelta(days=1)  # Move to Friday
-elif selected_date.weekday() == 6:  # Sunday
-    selected_date = selected_date - timedelta(days=2)  # Move to Friday
-
 selected_date = pd.to_datetime(selected_date)
+
+# Ensure that weekends (Saturday/Sunday) are not selected
+if selected_date.weekday() == 5:  # Saturday
+    st.error("⚠️ The stock market is closed on Saturdays. Please select the nearest Friday.")
+    # Adjust selected date to the previous Friday
+    selected_date = selected_date - timedelta(days=1)
+elif selected_date.weekday() == 6:  # Sunday
+    st.error("⚠️ The stock market is closed on Sundays. Please select the nearest Friday.")
+    # Adjust selected date to the previous Friday
+    selected_date = selected_date - timedelta(days=2)
+
 
 # ---- Dynamic horizon control ----
 # Days left in dataset after the selected date (counting actual trading days left in your dataset, not calendar gaps.)
