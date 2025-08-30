@@ -1,14 +1,10 @@
-
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
 from tensorflow.keras.models import load_model
-from sklearn.metrics import r2_score
 import plotly.graph_objs as go
 from datetime import timedelta
-
 
 # Load resources once
 @st.cache_resource
@@ -30,6 +26,7 @@ resources = load_resources()
 # Streamlit setup
 st.set_page_config(page_title="📊 Stock Price Prediction", layout="wide")
 
+# Custom Styles
 st.markdown(
     """
     <style>
@@ -54,6 +51,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Title
 st.title("📊 Stock Price Prediction Dashboard")
 st.markdown("Select a stock, date, and prediction horizon. The app will forecast the closing price for the next few days.")
 
@@ -68,15 +66,20 @@ valid_dates = data.index[60:]  # skip first 60 days
 all_dates = pd.date_range(start=valid_dates[0], end=valid_dates[-1], freq='D')
 weekends = all_dates[all_dates.weekday >= 5]  # Saturday (5) and Sunday (6)
 
-
-# Calendar-style date picker
+# Calendar-style date picker with weekend disabled
 selected_date = st.sidebar.date_input(
     "📅 Select Date",
     value=valid_dates[-1],        # default = latest valid date
     min_value=valid_dates[0],     # earliest selectable date
     max_value=valid_dates[-1],    # latest selectable date
-    disabled=weekends.tolist()    # Disable weekends
 )
+
+# Ensure the selected date is a valid trading day (exclude weekends)
+if selected_date.weekday() == 5:  # Saturday
+    selected_date = selected_date - timedelta(days=1)  # Move to Friday
+elif selected_date.weekday() == 6:  # Sunday
+    selected_date = selected_date - timedelta(days=2)  # Move to Friday
+
 selected_date = pd.to_datetime(selected_date)
 
 # ---- Dynamic horizon control ----
@@ -92,6 +95,7 @@ days_ahead = st.sidebar.slider(
     max_value=max_horizon,
     value=1
 )
+
 # Prepare input (last 60 days)
 idx = data.index.get_loc(selected_date)
 scaler = resources[stock_choice]["scaler"]
@@ -128,14 +132,6 @@ st.markdown(
    unsafe_allow_html=True
 )
 
-       
-# Explanation Section
-st.markdown("""
-### ℹ️ How to Interpret the Results
-- **Predicted Closing Price** → This is the model’s forecast for the next trading day based on the last 60 days of stock Closing prices.
-- **% Change vs Last Close** → Shows how much higher or lower the predicted price is compared to the most recent closing price.
-""")
-
 # Plot with shaded prediction zone
 fig = go.Figure()
 # Actual price
@@ -161,7 +157,6 @@ fig.update_layout(
 st.plotly_chart(fig, use_container_width=True)
 
 st.caption("⚠️ Note: Predictions are based on past 60-day patterns. Longer horizons may be less accurate.")
-
 
 # About Section 
 st.markdown("---")  # horizontal separator
