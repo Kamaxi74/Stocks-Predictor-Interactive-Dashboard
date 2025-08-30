@@ -128,8 +128,6 @@ st.markdown("""
 ### ℹ️ How to Interpret the Results
 - **Predicted Closing Price** → This is the model’s forecast for the next trading day based on the last 60 days of stock Closing prices.
 - **% Change vs Last Close** → Shows how much higher or lower the predicted price is compared to the most recent closing price.
-- **R² Score** → A measure of accuracy. Closer to **1.0** means the model explains the stock’s recent movements well.  
-- Example: `0.90` = very strong accuracy, `0.50` = moderate, `0.0` = poor.
 """)
 
 # Plot with shaded prediction zone
