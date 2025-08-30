@@ -56,7 +56,7 @@ st.title("📊 Stock Price Prediction Dashboard")
 st.markdown("Select a stock, date, and prediction horizon. The app will forecast the closing price for the next few days.")
 
 # Sidebar inputs
-stock_choice = st.sidebar.selectbox("📈 Select Stock", ["TESLA", "GOOGLE"])
+stock_choice = st.sidebar.selectbox("📈 Select Stock", ["TSLA", "GOOGL"])
 data = resources[stock_choice]["data"]
 
 # Only allow dates with at least 60 prior days
