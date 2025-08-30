@@ -1,3 +1,5 @@
+
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -59,100 +61,108 @@ st.markdown("Select a stock, date, and prediction horizon. The app will forecast
 stock_choice = st.sidebar.selectbox("📈 Select Stock", ["TSLA", "GOOGL"])
 data = resources[stock_choice]["data"]
 
-selected_date = st.sidebar.selectbox("📅 Select Date", options=data.index.strftime("%Y-%m-%d"))
+# Only allow dates with at least 60 prior days
+valid_dates = data.index[60:]  # skip first 60 days
+
+# Calendar-style date picker
+selected_date = st.sidebar.date_input(
+    "📅 Select Date",
+    value=valid_dates[-1],        # default = latest valid date
+    min_value=valid_dates[0],     # earliest selectable date
+    max_value=valid_dates[-1]     # latest selectable date
+)
 selected_date = pd.to_datetime(selected_date)
 
-days_ahead = st.sidebar.slider("🔮 Predict how many days ahead?", min_value=1, max_value=10, value=1)
+# ---- Dynamic horizon control ----
+# Days left in dataset after the selected date (counting actual trading days left in your dataset, not calendar gaps.)
+days_remaining = len(data.loc[selected_date:].index) - 1
 
-# Ensure valid date
-if selected_date not in data.index:
-    st.error("Date not found in data.")
-else:
-    idx = data.index.get_loc(selected_date)
-    if idx < 60:
-        st.error("Not enough data before this date to make prediction (need 60 days).")
-    else:
-        scaler = resources[stock_choice]["scaler"]
-        model = resources[stock_choice]["model"]
+# User can select 1–10 days ahead, but capped at available range
+max_horizon = min(10, days_remaining)
 
-        # Prepare input (last 60 days)
-        past_60 = data["Close"].iloc[idx-60:idx].values.reshape(-1, 1)
-        scaled_input = scaler.transform(past_60)
-        last_sequence = scaled_input.copy()
+days_ahead = st.sidebar.slider(
+    "🔮 Predict how many days ahead?",
+    min_value=1,
+    max_value=max_horizon,
+    value=1
+)
+# Prepare input (last 60 days)
+idx = data.index.get_loc(selected_date)
+scaler = resources[stock_choice]["scaler"]
+model = resources[stock_choice]["model"]
 
-        predictions = []
-        for _ in range(days_ahead):
-            pred_scaled = model.predict(np.array([last_sequence]), verbose=0)
-            pred_price = scaler.inverse_transform(pred_scaled)[0][0]
-            predictions.append(pred_price)
-            last_sequence = np.vstack([last_sequence[1:], pred_scaled])
+past_60 = data["Close"].iloc[idx-60:idx].values.reshape(-1, 1)
+scaled_input = scaler.transform(past_60)
+last_sequence = scaled_input.copy()
 
-        # Actual closing price
-        actual_close = data.loc[selected_date, "Close"]
+predictions = []
+for _ in range(days_ahead):
+   pred_scaled = model.predict(np.array([last_sequence]), verbose=0)
+   pred_price = scaler.inverse_transform(pred_scaled)[0][0]
+   predictions.append(pred_price)
+   last_sequence = np.vstack([last_sequence[1:], pred_scaled])
 
-        # Prediction dates
-        prediction_dates = [selected_date + timedelta(days=i+1) for i in range(days_ahead)]
+# Actual closing price
+actual_close = data.loc[selected_date, "Close"]
 
-        # Display result card
-        st.markdown(
-            f"""
-            <div class="result-card">
-                <h2>{stock_choice} Forecast</h2>
-                <p><b>Selected Date:</b> {selected_date.date()}</p>
-                <p><b>Actual Close:</b> ${actual_close:.2f}</p>
-                <p><b>Predicted Close ({days_ahead} day(s) ahead):</b> <span style="color:green; font-weight:bold;">${predictions[-1]:.2f}</span></p>
-                <p><b>Change vs. Last Close:</b> {((predictions[-1] - actual_close)/actual_close)*100:.2f}%</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+# Prediction dates
+prediction_dates = [selected_date + timedelta(days=i+1) for i in range(days_ahead)]
 
-        # R² Score (for user explanation)
-        y_true = past_60.flatten()
-        y_pred = scaler.inverse_transform(model.predict(np.array([scaled_input])))[0].flatten()
-        r2 = r2_score(y_true, y_pred)
-        st.info(f"📏 R² Score (last 60-day model fit): {r2:.3f}")
+# Display result card
+st.markdown(
+   f"""
+   <div class="result-card">
+   <h2>{stock_choice} Forecast</h2>
+   <p><b>Selected Date:</b> {selected_date.date()}</p>
+   <p><b>Actual Close:</b> ${actual_close:.2f}</p>
+   <p><b>Predicted Close ({days_ahead} day(s) ahead):</b> <span style="color:green; font-weight:bold;">${predictions[-1]:.2f}</span></p>
+   <p><b>Change vs. Last Close:</b> {((predictions[-1] - actual_close)/actual_close)*100:.2f}%</p>
+   </div>
+   """,
+   unsafe_allow_html=True
+)
 
-           # Explanation Section
-        st.markdown("""
-        ### ℹ️ How to Interpret the Results
-        - **Predicted Closing Price** → This is the model’s forecast for the next trading day based on the last 60 days of stock Closing prices.
-        - **% Change vs Last Close** → Shows how much higher or lower the predicted price is compared to the most recent closing price.
-        - **R² Score** → A measure of accuracy. Closer to **1.0** means the model explains the stock’s recent movements well.  
-          - Example: `0.90` = very strong accuracy, `0.50` = moderate, `0.0` = poor.
-        """)
+       
+# Explanation Section
+st.markdown("""
+### ℹ️ How to Interpret the Results
+- **Predicted Closing Price** → This is the model’s forecast for the next trading day based on the last 60 days of stock Closing prices.
+- **% Change vs Last Close** → Shows how much higher or lower the predicted price is compared to the most recent closing price.
+- **R² Score** → A measure of accuracy. Closer to **1.0** means the model explains the stock’s recent movements well.  
+- Example: `0.90` = very strong accuracy, `0.50` = moderate, `0.0` = poor.
+""")
 
-        # Plot with shaded prediction zone
-        fig = go.Figure()
-        # Actual price
-        fig.add_trace(go.Scatter(x=data.index[:idx+1], y=data["Close"].iloc[:idx+1],
-                                 mode="lines", name="Actual Price", line=dict(color="blue")))
-        # Prediction line
-        fig.add_trace(go.Scatter(x=prediction_dates, y=predictions,
-                                 mode="lines+markers", name="Predicted Price",
-                                 marker=dict(color="red", size=8)))
-        # Shade forecast zone
-        fig.add_vrect(
-            x0=prediction_dates[0], x1=prediction_dates[-1],
-            fillcolor="rgba(255,0,0,0.1)", layer="below", line_width=0
-        )
+# Plot with shaded prediction zone
+fig = go.Figure()
+# Actual price
+fig.add_trace(go.Scatter(x=data.index[:idx+1], y=data["Close"].iloc[:idx+1],
+              mode="lines", name="Actual Price", line=dict(color="blue")))
+# Prediction line
+fig.add_trace(go.Scatter(x=prediction_dates, y=predictions,
+              mode="lines+markers", name="Predicted Price",
+              marker=dict(color="red", size=8)))
+# Shade forecast zone
+fig.add_vrect(
+              x0=prediction_dates[0], x1=prediction_dates[-1],
+              fillcolor="rgba(255,0,0,0.1)", layer="below", line_width=0
+             )
 
-        fig.update_layout(
-            title=f"📉 {stock_choice} Historical vs Forecast ({days_ahead}-Day Horizon)",
-            xaxis_title="Date",
-            yaxis_title="Price (USD)",
-            template="plotly_white",
-            plot_bgcolor="#f9fbfd"
-        )
-        st.plotly_chart(fig, use_container_width=True)
+fig.update_layout(
+                title=f"📉 {stock_choice} Historical vs Forecast ({days_ahead}-Day Horizon)",
+                xaxis_title="Date",
+                yaxis_title="Price (USD)",
+                template="plotly_white",
+                plot_bgcolor="#f9fbfd"
+            )
+st.plotly_chart(fig, use_container_width=True)
 
-        st.caption("⚠️ Note: Predictions are based on past 60-day patterns. Longer horizons may be less accurate.")
+st.caption("⚠️ Note: Predictions are based on past 60-day patterns. Longer horizons may be less accurate.")
 
 
-    # About Section 
-    st.markdown("---")  # horizontal separator
+# About Section 
+st.markdown("---")  # horizontal separator
 
-    st.markdown("""
+st.markdown("""
     ## 📘 About this Dashboard
 
     This Stock-Predictor-Interactive-Dashboard predicts **next-day stock closing prices** for **Tesla (TSLA)** and **Google (GOOGL)**.
@@ -175,4 +185,3 @@ else:
     - Model: **LSTM (Keras/TensorFlow)**
     - Data: Pre-downloaded Tesla and Google historical closing prices from Yahoo Finance
     """)
-
