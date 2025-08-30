@@ -5,193 +5,174 @@ import joblib
 from tensorflow.keras.models import load_model
 from sklearn.metrics import r2_score
 import plotly.graph_objs as go
-from datetime import datetime
+from datetime import timedelta
 
-st.set_page_config(page_title="Stock Price Prediction Dashboard", layout="wide")
 
-# Custom CSS for background & cards
-st.markdown("""
-    <style>
-        /* Background colors */
-        .stApp {
-            background-color: #f5f7fa;
-        }
-        section[data-testid="stSidebar"] {
-            background-color: #eaf2f8;
-        }
-        h1, h2, h3, h4 {
-            color: #2c3e50;
-        }
-
-        /* KPI card styling */
-        .kpi-card {
-            padding: 20px;
-            border-radius: 15px;
-            text-align: center;
-            font-size: 20px;
-            font-weight: bold;
-            margin: 10px;
-        }
-        .predicted {
-            background-color: #d6eaf8; /* light blue */
-            color: #154360;
-        }
-        .r2score {
-            background-color: #d4efdf; /* light green */
-            color: #145a32;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-  # -------------------- 1. Load Models & Scalers --------------------
+# Load resources once
 @st.cache_resource
 def load_resources():
     tsla_model = load_model("tsla_lstm_model.h5", compile=False)
     tsla_scaler = joblib.load("tsla_scaler.joblib")
-
     googl_model = load_model("googl_lstm_model.h5", compile=False)
     googl_scaler = joblib.load("googl_scaler.joblib")
+    tsla_data = pd.read_csv("tsla_data.csv", parse_dates=True, index_col=0)
+    googl_data = pd.read_csv("googl_data.csv", parse_dates=True, index_col=0)
 
     return {
-        "TSLA": {"model": tsla_model, "scaler": tsla_scaler, "data": "tsla_data.csv"},
-        "GOOGL": {"model": googl_model, "scaler": googl_scaler, "data": "googl_data.csv"},
+        "TSLA": {"model": tsla_model, "scaler": tsla_scaler, "data": tsla_data},
+        "GOOGL": {"model": googl_model, "scaler": googl_scaler, "data": googl_data},
     }
 
 resources = load_resources()
 
-# -------------------- 2. UI Layout --------------------
+# Streamlit setup
+st.set_page_config(page_title="📊 Stock Price Prediction", layout="wide")
+
+st.markdown(
+    """
+    <style>
+    .stApp { background-color: #f7fbff; }
+    .result-card {
+        background-color: #e3f2fd;
+        padding: 20px;
+        border-radius: 10px;
+        margin-top: 10px;
+        text-align: center;
+    }
+    .result-card h2 {
+        font-size: 32px;
+        margin-bottom: 5px;
+    }
+    .result-card p {
+        font-size: 18px;
+        margin: 0;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 st.title("📊 Stock Price Prediction Dashboard")
-st.markdown("Select a stock and date range to view historical prices and predict the next closing price.")
+st.markdown("Select a stock, date, and prediction horizon. The app will forecast the closing price for the next few days.")
 
-# Sidebar for user input
-st.sidebar.header("User Input")
-selected_stock = st.sidebar.selectbox("Select Stock", ["TSLA", "GOOGL"])
-start_date = st.sidebar.date_input("Start Date", datetime(2022, 1, 1))
-end_date = st.sidebar.date_input("End Date", datetime.today())
+# Sidebar inputs
+stock_choice = st.sidebar.selectbox("📈 Select Stock", ["TSLA", "GOOGL"])
+data = resources[stock_choice]["data"]
 
-# -------------------- 3. Load Historical Data --------------------
-data_path = resources[selected_stock]["data"]
-df = pd.read_csv(data_path, index_col=0, parse_dates=True)
+selected_date = st.sidebar.selectbox("📅 Select Date", options=data.index.strftime("%Y-%m-%d"))
+selected_date = pd.to_datetime(selected_date)
 
-# Filter by selected dates
-df = df.loc[start_date:end_date]
+days_ahead = st.sidebar.slider("🔮 Predict how many days ahead?", min_value=1, max_value=10, value=1)
 
-if df.empty:
-    st.error("⚠️ No data available for this date range. Please select different dates.")
-    st.stop()
+# Ensure valid date
+if selected_date not in data.index:
+    st.error("Date not found in data.")
+else:
+    idx = data.index.get_loc(selected_date)
+    if idx < 60:
+        st.error("Not enough data before this date to make prediction (need 60 days).")
+    else:
+        scaler = resources[stock_choice]["scaler"]
+        model = resources[stock_choice]["model"]
 
-# Display historical chart
-st.subheader(f"📈 Historical Closing Prices for {selected_stock}")
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df.index, y=df["Close"], mode="lines", name="Closing Price"))
-fig.update_layout(xaxis_title="Date", yaxis_title="Price (USD)")
-st.plotly_chart(fig, use_container_width=True)
+        # Prepare input (last 60 days)
+        past_60 = data["Close"].iloc[idx-60:idx].values.reshape(-1, 1)
+        scaled_input = scaler.transform(past_60)
+        last_sequence = scaled_input.copy()
 
-# -------------------- 4. Predict Next Day Price --------------------
-if st.sidebar.button("Predict Next Day's Price"):
+        predictions = []
+        for _ in range(days_ahead):
+            pred_scaled = model.predict(np.array([last_sequence]), verbose=0)
+            pred_price = scaler.inverse_transform(pred_scaled)[0][0]
+            predictions.append(pred_price)
+            last_sequence = np.vstack([last_sequence[1:], pred_scaled])
 
-    model = resources[selected_stock]["model"]
-    scaler = resources[selected_stock]["scaler"]
+        # Actual closing price
+        actual_close = data.loc[selected_date, "Close"]
 
-    # Last 60 days data
-    last_60 = df["Close"].values[-60:]
-    scaled = scaler.transform(last_60.reshape(-1, 1))
+        # Prediction dates
+        prediction_dates = [selected_date + timedelta(days=i+1) for i in range(days_ahead)]
 
-    X_test = np.array([scaled])
-    y_pred = model.predict(X_test)
-    predicted_price = scaler.inverse_transform(y_pred)[0][0]
+        # Display result card
+        st.markdown(
+            f"""
+            <div class="result-card">
+                <h2>{stock_choice} Forecast</h2>
+                <p><b>Selected Date:</b> {selected_date.date()}</p>
+                <p><b>Actual Close:</b> ${actual_close:.2f}</p>
+                <p><b>Predicted Close ({days_ahead} day(s) ahead):</b> <span style="color:green; font-weight:bold;">${predictions[-1]:.2f}</span></p>
+                <p><b>Change vs. Last Close:</b> {((predictions[-1] - actual_close)/actual_close)*100:.2f}%</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-    last_close = df["Close"].iloc[-1]
+        # R² Score (for user explanation)
+        y_true = past_60.flatten()
+        y_pred = scaler.inverse_transform(model.predict(np.array([scaled_input])))[0].flatten()
+        r2 = r2_score(y_true, y_pred)
+        st.info(f"📏 R² Score (last 60-day model fit): {r2:.3f}")
 
-    # -------------------- 5. KPI Display --------------------
-st.success("✅ Prediction complete!")
+           # Explanation Section
+        st.markdown("""
+        ### ℹ️ How to Interpret the Results
+        - **Predicted Closing Price** → This is the model’s forecast for the next trading day based on the last 60 days of stock Closing prices.
+        - **% Change vs Last Close** → Shows how much higher or lower the predicted price is compared to the most recent closing price.
+        - **R² Score** → A measure of accuracy. Closer to **1.0** means the model explains the stock’s recent movements well.  
+          - Example: `0.90` = very strong accuracy, `0.50` = moderate, `0.0` = poor.
+        """)
 
-col1, col2 = st.columns(2)
+        # Plot with shaded prediction zone
+        fig = go.Figure()
+        # Actual price
+        fig.add_trace(go.Scatter(x=data.index[:idx+1], y=data["Close"].iloc[:idx+1],
+                                 mode="lines", name="Actual Price", line=dict(color="blue")))
+        # Prediction line
+        fig.add_trace(go.Scatter(x=prediction_dates, y=predictions,
+                                 mode="lines+markers", name="Predicted Price",
+                                 marker=dict(color="red", size=8)))
+        # Shade forecast zone
+        fig.add_vrect(
+            x0=prediction_dates[0], x1=prediction_dates[-1],
+            fillcolor="rgba(255,0,0,0.1)", layer="below", line_width=0
+        )
 
-with col1:
-    st.markdown(
-        f"""
-        <div class="kpi-card predicted">
-            Predicted Closing Price<br>
-            <span style="font-size:28px;">${predicted_price:.2f}</span><br>
-            <span style="font-size:16px;">Change vs Last Close: {((predicted_price - last_close)/last_close)*100:.2f}%</span>
-        </div>
-        """, unsafe_allow_html=True
-    )
+        fig.update_layout(
+            title=f"📉 {stock_choice} Historical vs Forecast ({days_ahead}-Day Horizon)",
+            xaxis_title="Date",
+            yaxis_title="Price (USD)",
+            template="plotly_white",
+            plot_bgcolor="#f9fbfd"
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-with col2:
-    st.markdown(
-        f"""
-        <div class="kpi-card r2score">
-            R² Score (Last 60 days)<br>
-            <span style="font-size:28px;">{r2:.4f}</span>
-        </div>
-        """, unsafe_allow_html=True
-    )
+        st.caption("⚠️ Note: Predictions are based on past 60-day patterns. Longer horizons may be less accurate.")
 
-    # -------------------- 6. Explanation Section --------------------
-    st.markdown("""
-### ℹ️ How to Interpret the Results
-- **Predicted Closing Price** → This is the model’s forecast for the next trading day based on the last 60 days of stock Closing prices.
-- **% Change vs Last Close** → Shows how much higher or lower the predicted price is compared to the most recent closing price.
-- **R² Score** → A measure of accuracy. Closer to **1.0** means the model explains the stock’s recent movements well.  
-  - Example: `0.90` = very strong accuracy, `0.50` = moderate, `0.0` = poor.
-""")
 
-    # -------------------- 7. Plot Prediction --------------------
-    st.subheader(f"Recent Price vs Predicted Price for {selected_stock}")
-    fig2 = go.Figure()
-    fig2.add_trace(go.Scatter(x=df.index[-60:], y=df["Close"].values[-60:], 
-                              mode="lines", name="Recent Historical Price"))
-    fig2.add_trace(go.Scatter(x=[df.index[-1] + pd.Timedelta(days=1)], 
-                              y=[predicted_price], mode="markers+text", 
-                              name="Predicted Price", text=[f"{predicted_price:.2f}"], 
-                              textposition="top center", marker=dict(color="red", size=10)))
-    fig2.update_layout(xaxis_title="Date", yaxis_title="Price (USD)")
-    st.plotly_chart(fig2, use_container_width=True)
-
-    # -------------------- 8. Download Options --------------------
-    st.subheader("📥 Download Data")
-    # Prepare prediction row
-    prediction_df = pd.DataFrame({
-        "Date": [df.index[-1] + pd.Timedelta(days=1)],
-        "Predicted_Close": [predicted_price]
-    }).set_index("Date")
-
-    # Combine with historical data for download
-    export_df = pd.concat([df[["Close"]], prediction_df])
-
-    csv = export_df.to_csv().encode("utf-8")
-    st.download_button(
-        label="Download Historical + Prediction CSV",
-        data=csv,
-        file_name=f"{selected_stock}_prediction.csv",
-        mime="text/csv",
-    )
-
-    # -------------------- 9. About Section --------------------
+    # About Section 
     st.markdown("---")  # horizontal separator
 
     st.markdown("""
-    ## 📘 About this Dashboard  
+    ## 📘 About this Dashboard
 
-    This Stock-Predictor-Interactive-Dashboard predicts **next-day stock closing prices** for **Tesla (TSLA)** and **Google (GOOGL)**.  
-    It uses a **Long Short-Term Memory (LSTM)** deep learning model, trained on historical stock price data for both Tesla and Google.  
+    This Stock-Predictor-Interactive-Dashboard predicts **next-day stock closing prices** for **Tesla (TSLA)** and **Google (GOOGL)**.
+    It uses a **Long Short-Term Memory (LSTM)** deep learning model, trained on historical stock price data for both Tesla and Google.
 
     ### 🔍 How it Works
-    1. The model takes the **last 60 days of closing prices** as input from the Historical saved data  
-    2. It learns patterns and trends in stock movements .  
-    3. It outputs a **forecast for the next trading day’s closing price**.  
+    1. The model takes the **last 60 days of closing prices** as input from the Historical saved data
+    2. It learns patterns and trends in stock movements .
+    3. It outputs a **forecast for the next trading day’s closing price**.
 
     ### ⚠️ Important Notes
-    - The stock market is highly volatile, and its movements depend on many external factors such as company news, global events, government policies, 
+    - The stock market is highly volatile, and its movements depend on many external factors such as company news, global events, government policies,
       natural calamities (e.g., COVID-19, tsunamis, earthquakes), wars, and geopolitical tensions.
-    - These factors cannot be fully captured by predictive models like LSTM, and therefore, the predictions should be used for educational and research purposes only, not for financial decisions.  
-    - **Not financial advice** — do not use for real trading decisions.  
+    - These factors cannot be fully captured by predictive models like LSTM, and therefore, the predictions should be used for educational and research purposes only, not for financial decisions.
+    - **Not financial advice** — do not use for real trading decisions.
 
     ### 👨‍💻 Project Credits
-    - Developed as part of a **Stock Price Prediction System** project.  
-    - Framework: **Streamlit**  
-    - Model: **LSTM (Keras/TensorFlow)**  
-    - Data: Pre-downloaded Tesla and Google historical closing prices from Yahoo Finance  
+    - Developed as part of a **Stock Price Prediction System** project.
+    - Framework: **Streamlit**
+    - Model: **LSTM (Keras/TensorFlow)**
+    - Data: Pre-downloaded Tesla and Google historical closing prices from Yahoo Finance
     """)
+
