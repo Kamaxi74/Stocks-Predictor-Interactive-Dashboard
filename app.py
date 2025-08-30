@@ -64,12 +64,18 @@ data = resources[stock_choice]["data"]
 # Only allow dates with at least 60 prior days
 valid_dates = data.index[60:]  # skip first 60 days
 
+# Generate list of weekend dates between min and max date
+all_dates = pd.date_range(start=valid_dates[0], end=valid_dates[-1], freq='D')
+weekends = all_dates[all_dates.weekday >= 5]  # Saturday (5) and Sunday (6)
+
+
 # Calendar-style date picker
 selected_date = st.sidebar.date_input(
     "📅 Select Date",
     value=valid_dates[-1],        # default = latest valid date
     min_value=valid_dates[0],     # earliest selectable date
-    max_value=valid_dates[-1]     # latest selectable date
+    max_value=valid_dates[-1],    # latest selectable date
+    disabled=weekends.tolist()    # Disable weekends
 )
 selected_date = pd.to_datetime(selected_date)
 
