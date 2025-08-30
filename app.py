@@ -73,11 +73,11 @@ selected_date = pd.to_datetime(selected_date)
 
 # Ensure that weekends (Saturday/Sunday) are not selected
 if selected_date.weekday() == 5:  # Saturday
-    st.error("⚠️ The stock market is closed on Saturdays.So displayed for nearest Friday.")
+    st.error("⚠️ The stock market is closed on Saturdays.So price displayed for nearest Friday.")
     # Adjust selected date to the previous Friday
     selected_date = selected_date - timedelta(days=1)
 elif selected_date.weekday() == 6:  # Sunday
-    st.error("⚠️ The stock market is closed on Sundays.So displayed for nearest Friday.")
+    st.error("⚠️ The stock market is closed on Sundays.So price displayed for nearest Friday.")
     # Adjust selected date to the previous Friday
     selected_date = selected_date - timedelta(days=2)
 
