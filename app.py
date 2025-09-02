@@ -117,8 +117,22 @@ else:
 
         # Actual & predicted dates
         actual_close = data.loc[actual_date, "Close"]
-        prediction_dates = [actual_date + timedelta(days=i+1) for i in range(days_ahead)]
+        # Prediction dates (with weekend handling + warnings)
+        raw_prediction_dates = [selected_date + timedelta(days=i+1) for i in range(days_ahead)]
+        prediction_dates = []
 
+        for d in raw_prediction_dates:
+            if d.weekday() == 5:  # Saturday
+               shifted = d + timedelta(days=2)
+               prediction_dates.append(shifted)
+               st.warning(f"⚠️ Prediction date {d.date()} falls on Saturday. Showing next Monday ({shifted.date()}).")
+        elif d.weekday() == 6:  # Sunday
+               shifted = d + timedelta(days=1)
+               prediction_dates.append(shifted)
+               st.warning(f"⚠️ Prediction date {d.date()} falls on Sunday. Showing next Monday ({shifted.date()}).")
+        else:
+               prediction_dates.append(d)
+            
         # Adjust if prediction lands on Sat/Sun → push to Monday
         adjusted_prediction_dates = []
         for d in prediction_dates:
