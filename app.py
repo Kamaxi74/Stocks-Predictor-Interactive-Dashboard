@@ -183,11 +183,13 @@ It uses a **Long Short-Term Memory (LSTM)** deep learning model, trained on hist
 3. It outputs a **forecast for the next trading day’s closing price**.
 
 ### ⚠️ Important Notes
-- Stock market is highly volatile and influenced by many external factors (news, global events, policies, natural calamities, wars, etc.).
+- The stock market is highly volatile, and its movements depend on many external factors such as company news, global events, 
+  government policies, natural calamities (e.g., COVID-19, tsunamis, earthquakes), wars, and geopolitical tensions.
 - Predictions are for **educational purposes only** and **not financial advice**.
 
 ### 👨‍💻 Project Credits
+- Developed as part of a **Stock Price Prediction System** project.
 - Framework: **Streamlit**
 - Model: **LSTM (Keras/TensorFlow)**
-- Data: Pre-downloaded Tesla & Google historical closing prices
+- Data: Pre-downloaded Tesla and Google stock data from Yahoo Finance from 2010 to 2024
 """)
