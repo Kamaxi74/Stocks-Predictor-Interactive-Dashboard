@@ -122,17 +122,17 @@ else:
         prediction_dates = []
 
         for d in raw_prediction_dates:
-    if d.weekday() == 5:  # Saturday
-        shifted = d + timedelta(days=2)
-        prediction_dates.append(shifted)
-        st.warning(f"⚠️ Prediction date {d.date()} fell on Saturday. Shifted to Monday ({shifted.date()}).")
-    elif d.weekday() == 6:  # Sunday
-        shifted = d + timedelta(days=1)
-        prediction_dates.append(shifted)
-        st.warning(f"⚠️ Prediction date {d.date()} fell on Sunday. Shifted to Monday ({shifted.date()}).")
-    else:
-        # If already Monday–Friday, no warning
-        prediction_dates.append(d)
+            if d.weekday() == 5:  # Saturday
+               shifted = d + timedelta(days=2)
+               prediction_dates.append(shifted)
+               st.warning(f"⚠️ Prediction date {d.date()} fell on Saturday. Shifted to Monday ({shifted.date()}).")
+            elif d.weekday() == 6:  # Sunday
+               shifted = d + timedelta(days=1)
+               prediction_dates.append(shifted)
+               st.warning(f"⚠️ Prediction date {d.date()} fell on Sunday. Shifted to Monday ({shifted.date()}).")
+            else:
+               # If already Monday–Friday, no warning
+               prediction_dates.append(d)
             
         # Adjust if prediction lands on Sat/Sun → push to Monday
         adjusted_prediction_dates = []
