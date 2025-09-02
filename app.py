@@ -126,11 +126,11 @@ else:
                shifted = d + timedelta(days=2)
                prediction_dates.append(shifted)
                st.warning(f"⚠️ Prediction date {d.date()} falls on Saturday. Showing next Monday ({shifted.date()}).")
-        elif d.weekday() == 6:  # Sunday
+            elif d.weekday() == 6:  # Sunday
                shifted = d + timedelta(days=1)
                prediction_dates.append(shifted)
                st.warning(f"⚠️ Prediction date {d.date()} falls on Sunday. Showing next Monday ({shifted.date()}).")
-        else:
+            else:
                prediction_dates.append(d)
             
         # Adjust if prediction lands on Sat/Sun → push to Monday
