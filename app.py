@@ -66,7 +66,6 @@ data = resources[stock_choice]["data"]
 # Only allow dates with at least 60 prior days
 valid_dates = data.index[60:]
 
-# Calendar-style date picker
 selected_date = st.sidebar.date_input(
     "📅 Select Date",
     value=valid_dates[-1],
@@ -76,18 +75,9 @@ selected_date = st.sidebar.date_input(
 selected_date = pd.to_datetime(selected_date)
 
 # ---- Dynamic horizon control ----
-# Days left in dataset after the selected date
 days_remaining = len(data.loc[selected_date:].index) - 1
+max_horizon = min(10, days_remaining)
 
-# Cap horizon at 10, but ensure it's at least 1
-max_horizon = max(1, min(10, days_remaining))
-
-# Handle case when no days left
-if days_remaining <= 0:
-    st.error("⚠️ No future trading days available after the selected date. Please pick an earlier date.")
-    st.stop()
-
-# Prediction horizon slider
 days_ahead = st.sidebar.slider(
     "🔮 Predict how many days ahead?",
     min_value=1,
@@ -106,16 +96,17 @@ def adjust_to_trading_day(date, direction="forward"):
         return date - timedelta(days=2) if direction == "backward" else date + timedelta(days=1)
     return date
 
-# Adjust actual and prediction dates
+# Adjust selected date (Actual close)
 actual_date = adjust_to_trading_day(selected_date, direction="backward")
+
+# Prediction date
 prediction_date = selected_date + timedelta(days=days_ahead)
 prediction_date = adjust_to_trading_day(prediction_date, direction="forward")
 
 # Show warnings only if adjustment was needed
 if selected_date != actual_date:
     st.warning(f"📌 {selected_date.date()} was a weekend. Showing **last trading day (Friday {actual_date.date()})** for Actual Close.")
-
-if (selected_date + timedelta(days=days_ahead)) != prediction_date and prediction_date.weekday() not in [0]:
+if (selected_date + timedelta(days=days_ahead)) != prediction_date:
     st.warning(f"📌 Prediction landed on weekend. Showing **next trading day (Monday {prediction_date.date()})** instead.")
 
 # ----------------------------
@@ -136,11 +127,12 @@ for _ in range(days_ahead):
     predictions.append(pred_price)
     last_sequence = np.vstack([last_sequence[1:], pred_scaled])
 
-# ----------------------------
-# Results
-# ----------------------------
+# Actual closing price
 actual_close = data.loc[actual_date, "Close"]
 
+# ----------------------------
+# Display result card
+# ----------------------------
 st.markdown(
     f"""
     <div class="result-card">
@@ -161,11 +153,12 @@ fig = go.Figure()
 fig.add_trace(go.Scatter(x=data.index[:idx+1], y=data["Close"].iloc[:idx+1],
                          mode="lines", name="Actual Price", line=dict(color="blue")))
 fig.add_trace(go.Scatter(x=[prediction_date], y=[predictions[-1]],
-                         mode="markers", name="Predicted Price",
-                         marker=dict(color="red", size=10)))
+                         mode="markers+text", name="Predicted Price",
+                         marker=dict(color="red", size=10),
+                         text=[f"{predictions[-1]:.2f}"], textposition="top center"))
 
 fig.update_layout(
-    title=f"📉 {stock_choice} Historical vs Forecast ({days_ahead}-Day Horizon)",
+    title=f"📉 {stock_choice} Historical vs Forecast",
     xaxis_title="Date",
     yaxis_title="Price (USD)",
     template="plotly_white",
@@ -181,17 +174,22 @@ st.caption("⚠️ Note: Predictions are based on past 60-day patterns. Longer h
 st.markdown("---")
 st.markdown("""
 ## 📘 About this Dashboard
-
-This Stock-Predictor-Interactive-Dashboard predicts **next-day stock closing prices** for **Tesla (TSLA)** and **Google (GOOGL)**.  
-It uses a **Long Short-Term Memory (LSTM)** deep learning model, trained on historical stock price data for both Tesla and Google.
+This Stock-Predictor-Interactive-Dashboard predicts **next-day stock closing prices** for **Tesla (TSLA)** and **Google (GOOGL)**.
+It uses a **Long Short-Term Memory (LSTM)** deep learning model, trained on historical stock price data.
 
 ### 🔍 How it Works
-1. The model takes the **last 60 days of closing prices** as input from the historical saved data.  
-2. It learns patterns and trends in stock movements.  
+1. The model takes the **last 60 days of closing prices** as input.
+2. It learns patterns and trends in stock movements.
 3. It outputs a **forecast for the next trading day’s closing price**.
 
 ### ⚠️ Important Notes
-- The stock market is highly volatile, influenced by factors like company news, global events, policies, natural calamities, and wars.  
-- These cannot be fully captured by predictive models, so predictions are for **educational and research purposes only**.  
-- **Not financial advice** — do not use for real trading.  
+- The stock market is highly volatile, and its movements depend on many external factors such as company news, global events,
+  government policies, natural calamities (e.g., COVID-19, tsunamis, earthquakes), wars, and geopolitical tensions.
+- Predictions are for **educational purposes only** and **not financial advice**.
+
+### 👨‍💻 Project Credits
+- Developed as part of a **Stock Price Prediction System** project.
+- Framework: **Streamlit**
+- Model: **LSTM (Keras/TensorFlow)**
+- Data: Pre-downloaded Tesla and Google stock data from Yahoo Finance from 2010 to 2024
 """)
