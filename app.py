@@ -29,24 +29,6 @@ resources = load_resources()
 # ----------------------------
 st.set_page_config(page_title="📊 Stock Price Prediction", layout="wide")
 
-st.markdown(
-    """
-    <style>
-    .stApp { background-color: #f7fbff; }
-    .result-card {
-        background-color: #e3f2fd;
-        padding: 20px;
-        border-radius: 10px;
-        margin-top: 10px;
-        text-align: center;
-    }
-    .result-card h2 { font-size: 32px; margin-bottom: 5px; }
-    .result-card p { font-size: 18px; margin: 0; }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 st.title("📊 Stock Price Prediction Dashboard")
 st.markdown("Select a stock, date, and prediction horizon. The app will forecast the closing price for the next few days.")
 
@@ -72,103 +54,130 @@ selected_date = st.sidebar.date_input(
 selected_date = pd.to_datetime(selected_date)
 
 # ----------------------------
-# Helper functions (use trading calendar from the CSV index)
+# Helper functions
 # ----------------------------
 def trading_on_or_before(date: pd.Timestamp) -> pd.Timestamp:
-    """Nearest trading day on/before the given date, based on the CSV index (handles weekends & holidays)."""
     pos = data.index.searchsorted(date, side="right") - 1
     pos = max(0, min(pos, len(data.index) - 1))
     return data.index[pos]
 
 def trading_n_after(date: pd.Timestamp, n: int) -> pd.Timestamp:
-    """The trading day n steps after `date` (0 returns the same trading date)."""
     start_idx = data.index.get_loc(date)
     target_idx = min(start_idx + n, len(data.index) - 1)
     return data.index[target_idx]
 
-# Resolve the selected date to an actual trading date for the "Actual Close"
+# Resolve actual trading day
 actual_date = trading_on_or_before(selected_date)
 
-# Horizon: count remaining trading days after the actual trading day
+# Horizon setup
 idx_actual = data.index.get_loc(actual_date)
 days_remaining = (len(data.index) - 1) - idx_actual
 max_horizon = min(10, days_remaining)
 
-# Robust slider: allow 0 days ahead; disable if nothing left
-days_ahead = st.sidebar.slider(
-    "🔮 Predict how many days ahead?",
-    min_value=0,
-    max_value=max_horizon if max_horizon >= 0 else 0,
-    value=1 if max_horizon >= 1 else 0,
-    disabled=(max_horizon == 0)
-)
-
-# Compute the prediction trading date (skips weekends & holidays automatically)
-prediction_date = trading_n_after(actual_date, days_ahead)
+# ----------------------------
+# Slider OR no future days
+# ----------------------------
+if max_horizon == 0:
+    days_ahead = 0
+    st.sidebar.info("ℹ️ No predictions available beyond this date.")
+else:
+    days_ahead = st.sidebar.slider(
+        "🔮 Predict how many days ahead?",
+        min_value=0,
+        max_value=max_horizon,
+        value=1
+    )
 
 # ----------------------------
-# Warnings (only when adjustments were needed)
+# Prediction date logic
 # ----------------------------
-if selected_date != actual_date:
+if days_ahead == 0 and selected_date not in data.index:
+    # Special case: weekend/holiday with horizon=0 → shift prediction forward
+    prediction_date = trading_n_after(actual_date, 1)
+    st.warning(
+        f"📌 {selected_date.date()} was **not a trading day**. "
+        f"Showing last trading day **{actual_date.date()}** for Actual Close. "
+        f"Prediction moved to next trading day **{prediction_date.date()}**."
+    )
+else:
+    prediction_date = trading_n_after(actual_date, days_ahead)
+
+# Alert if selected was adjusted
+if selected_date != actual_date and not (days_ahead == 0 and selected_date not in data.index):
     st.warning(
         f"📌 {selected_date.date()} was **not a trading day**. "
         f"Showing last trading day **{actual_date.date()}** for Actual Close."
     )
 
+# Alert if prediction had to skip a holiday/weekend
 naive_calendar_pred = selected_date + pd.Timedelta(days=days_ahead)
-if days_ahead > 0 and prediction_date.date() != naive_calendar_pred.date():
+if prediction_date.date() != naive_calendar_pred.date() and days_ahead > 0:
     st.warning(
         f"📌 The prediction date fell on a **non-trading day**. "
         f"Showing next available trading day **{prediction_date.date()}** instead."
     )
 
 # ----------------------------
-# Prediction
+# Run prediction
 # ----------------------------
 scaler = resources[stock_choice]["scaler"]
 model = resources[stock_choice]["model"]
 
-# past 60 trading closes before actual_date
 past_60 = data["Close"].iloc[idx_actual-60:idx_actual].values.reshape(-1, 1)
 scaled_input = scaler.transform(past_60)
 last_sequence = scaled_input.copy()
 
 predicted_price = None
-if days_ahead > 0:
-    for _ in range(days_ahead):
+if days_ahead > 0 or (days_ahead == 0 and selected_date not in data.index):
+    steps = days_ahead if days_ahead > 0 else 1
+    for _ in range(steps):
         pred_scaled = model.predict(np.array([last_sequence]), verbose=0)
         last_sequence = np.vstack([last_sequence[1:], pred_scaled])
     predicted_price = float(scaler.inverse_transform(pred_scaled)[0][0])
 else:
-    # 0-day horizon -> "prediction" equals the actual close of the resolved trading day
     predicted_price = float(data.loc[actual_date, "Close"])
 
 actual_close = float(data.loc[actual_date, "Close"])
 
-# ----------------------------
-# Display result card
-# ----------------------------
 chg_pct = ((predicted_price - actual_close) / actual_close) * 100 if actual_close else 0.0
+
+# ----------------------------
+# Result card
+# ----------------------------
+# Color logic
+if predicted_price > actual_close:
+    price_color = "green"
+    chg_color = "green"
+elif predicted_price < actual_close:
+    price_color = "red"
+    chg_color = "red"
+else:
+    price_color = "black"
+    chg_color = "black"
+
 st.markdown(
     f"""
-    <div class="result-card">
+    <div style="background:#e3f2fd;padding:20px;border-radius:10px;margin-top:10px;text-align:center;">
         <h2>{stock_choice} Forecast</h2>
         <p><b>Selected Date:</b> {selected_date.date()}</p>
         <p><b>Actual Close ({actual_date.date()}):</b> ${actual_close:.2f}</p>
         <p><b>Predicted Close ({prediction_date.date()}):</b>
-            <span style="color:green; font-weight:bold;">${predicted_price:.2f}</span>
+            <span style="color:{price_color}; font-weight:bold;">${predicted_price:.2f}</span>
         </p>
-        <p><b>Change vs. Last Close:</b> {chg_pct:.2f}%</p>
+        <p><b>Change vs. Last Close:</b> 
+            <span style="color:{chg_color}; font-weight:bold;">{chg_pct:.2f}%</span>
+        </p>
     </div>
     """,
     unsafe_allow_html=True
 )
 
+
+
 # ----------------------------
 # Plot
 # ----------------------------
 fig = go.Figure()
-# up to the actual trading date
 fig.add_trace(go.Scatter(
     x=data.index[:idx_actual+1],
     y=data["Close"].iloc[:idx_actual+1],
@@ -176,8 +185,6 @@ fig.add_trace(go.Scatter(
     name="Actual Price",
     line=dict(color="blue")
 ))
-
-# predicted marker (always show at prediction_date, which may equal actual_date if days_ahead=0)
 fig.add_trace(go.Scatter(
     x=[prediction_date],
     y=[predicted_price],
@@ -187,7 +194,6 @@ fig.add_trace(go.Scatter(
     text=[f"{predicted_price:.2f}"],
     textposition="top center"
 ))
-
 fig.update_layout(
     title=f"📉 {stock_choice} Historical vs Forecast",
     xaxis_title="Date",
