@@ -76,9 +76,18 @@ selected_date = st.sidebar.date_input(
 selected_date = pd.to_datetime(selected_date)
 
 # ---- Dynamic horizon control ----
+# Days left in dataset after the selected date
 days_remaining = len(data.loc[selected_date:].index) - 1
-max_horizon = min(10, days_remaining)
 
+# Cap horizon at 10, but ensure it's at least 1
+max_horizon = max(1, min(10, days_remaining))
+
+# Handle case when no days left
+if days_remaining <= 0:
+    st.error("⚠️ No future trading days available after the selected date. Please pick an earlier date.")
+    st.stop()
+
+# Prediction horizon slider
 days_ahead = st.sidebar.slider(
     "🔮 Predict how many days ahead?",
     min_value=1,
