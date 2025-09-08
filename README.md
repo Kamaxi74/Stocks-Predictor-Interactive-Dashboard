@@ -20,19 +20,8 @@ The interactive Dashboard will offer the following options:
    
 📂 Project Structure
 📁 Stock-Prediction-Dashboard
-│──src  file 	        		  #Main Source code (Google Colab code)
-│── app.py                 	# Main Streamlit app
-│── tsla_lstm_model.h5     	# Pre-trained Tesla LSTM model
-│── googl_lstm_model.h5     # Pre-trained Google LSTM model
-│── tsla_scaler.joblib     	# Fitted scaler for Tesla data
-│── googl_scaler.joblib    	# Fitted scaler for Google data
-│── tsla_data.csv          	# Tesla stock history (pre-downloaded)
-│── googl_data.csv         	# Google stock history (pre-downloaded)
-│── requirements.txt       	# Project dependencies
-│── README.docx             # Project documentation (this file)
 
 <img width="543" height="263" alt="image" src="https://github.com/user-attachments/assets/af8d7970-95e1-4cef-bbfc-45f493eaebed" />
-
 
 📖 How to Run Locally
 1.	Install the repository: git init
