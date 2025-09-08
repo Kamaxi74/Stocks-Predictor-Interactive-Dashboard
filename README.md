@@ -31,6 +31,9 @@ The interactive Dashboard will offer the following options:
 │── requirements.txt       	# Project dependencies
 │── README.docx             # Project documentation (this file)
 
+<img width="543" height="263" alt="image" src="https://github.com/user-attachments/assets/af8d7970-95e1-4cef-bbfc-45f493eaebed" />
+
+
 📖 How to Run Locally
 1.	Install the repository: git init
 2.	Change to project directory: cd Stock-Prediction-Dashboard
