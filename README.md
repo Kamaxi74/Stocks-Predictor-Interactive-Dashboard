@@ -20,7 +20,7 @@ The interactive Dashboard will offer the following options:
    
 📂 Project Structure
 📁 Stock-Prediction-Dashboard
-│──src  file 	        		  #Main Source code (Google Colab code)	          
+│──src  file 	        		  #Main Source code (Google Colab code)
 │── app.py                 	# Main Streamlit app
 │── tsla_lstm_model.h5     	# Pre-trained Tesla LSTM model
 │── googl_lstm_model.h5     # Pre-trained Google LSTM model
