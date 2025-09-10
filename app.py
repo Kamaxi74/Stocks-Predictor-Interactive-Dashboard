@@ -164,7 +164,7 @@ st.markdown(
         <p><b>Predicted Close ({prediction_date.date()}):</b>
             <span style="color:{price_color}; font-weight:bold;">${predicted_price:.2f}</span>
         </p>
-        <p><b>Change vs. Last Close:</b> 
+        <p><b>Change vs. Last Close:</b>
             <span style="color:{chg_color}; font-weight:bold;">{chg_pct:.2f}%</span>
         </p>
     </div>
